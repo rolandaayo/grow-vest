@@ -110,8 +110,9 @@ app.use((req, res) => {
 // ─── Global error handler ─────────────────────────────────────────────────────
 app.use(errorHandler);
 
-// ─── Start server (skipped on Vercel — it imports the module directly) ────────
-if (process.env.NODE_ENV !== "production") {
+// ─── Start server ─────────────────────────────────────────────────────────────
+// Vercel imports this module directly — only listen when running locally
+if (require.main === module) {
   const PORT = process.env.PORT || 5000;
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT} [${process.env.NODE_ENV}]`);
