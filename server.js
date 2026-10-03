@@ -17,39 +17,34 @@ const withdrawalRoutes = require("./routes/withdrawalRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 
-// ─── Connect DB ───────────────────────────────────────────────────────────────
-connectDB();
-
 const app = express();
 
-// ─── Allowed origins ──────────────────────────────────────────────────────────
-// Accepts the production domain, any Vercel preview URL, and localhost
+// ─── Allowed CORS origins ─────────────────────────────────────────────────────
 const allowedOrigins = [
-  "https://grow-vest-lemon.vercel.app",
+  "https://grow-vest-lemon.vercel.app", // Vercel frontend
+  "https://growvestinc.web.app", // Firebase frontend
+  "https://growvestinc.firebaseapp.com", // Firebase alt domain
   "http://localhost:3000",
   "http://localhost:3001",
 ];
 
 const corsOptions = {
-  origin: (origin, callback) => {
-    // allow requests with no origin (curl, Postman, mobile apps)
-    if (!origin) return callback(null, true);
-
-    const isVercelPreview = /^https:\/\/grow-vest.*\.vercel\.app$/.test(origin);
-    if (allowedOrigins.includes(origin) || isVercelPreview) {
-      return callback(null, true);
-    }
-    callback(new Error(`CORS: origin ${origin} not allowed`));
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // curl / Postman / server-to-server
+    const ok =
+      allowedOrigins.includes(origin) ||
+      /^https:\/\/grow-vest.*\.vercel\.app$/.test(origin);
+    if (ok) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 };
 
-// ─── Security middleware ──────────────────────────────────────────────────────
 app.use(helmet());
 app.use(cors(corsOptions));
-app.options("*", cors(corsOptions)); // pre-flight for all routes
+app.options("*", cors(corsOptions)); // pre-flight
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 const authLimiter = rateLimit({
@@ -57,15 +52,12 @@ const authLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many requests, please try again later.",
-  },
+  message: { success: false, message: "Too many requests. Try again later." },
 });
 
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -76,10 +68,22 @@ app.use(globalLimiter);
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// ─── Logger (skip in production) ──────────────────────────────────────────────
-if (process.env.NODE_ENV !== "production") {
-  app.use(morgan("dev"));
-}
+if (process.env.NODE_ENV !== "production") app.use(morgan("dev"));
+
+// ─── Lazy DB middleware ───────────────────────────────────────────────────────
+// For Vercel serverless: connect on first request, reuse after
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    return res.status(503).json({
+      success: false,
+      message: "Database unavailable. Please try again in a moment.",
+      detail: process.env.NODE_ENV !== "production" ? err.message : undefined,
+    });
+  }
+});
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
@@ -100,23 +104,22 @@ app.use("/api/withdrawals", withdrawalRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/admin", adminRoutes);
 
-// ─── 404 handler ──────────────────────────────────────────────────────────────
+// ─── 404 ──────────────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res
     .status(404)
     .json({ success: false, message: `Route ${req.originalUrl} not found` });
 });
 
-// ─── Global error handler ─────────────────────────────────────────────────────
+// ─── Error handler ────────────────────────────────────────────────────────────
 app.use(errorHandler);
 
-// ─── Start server ─────────────────────────────────────────────────────────────
-// Vercel imports this module directly — only listen when running locally
+// ─── Local dev server ─────────────────────────────────────────────────────────
 if (require.main === module) {
   const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT} [${process.env.NODE_ENV}]`);
-  });
+  app.listen(PORT, () =>
+    console.log(`🚀 Server running on port ${PORT} [${process.env.NODE_ENV}]`),
+  );
 }
 
 module.exports = app;
