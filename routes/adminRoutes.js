@@ -12,6 +12,12 @@ const {
   updateWithdrawalStatus,
   getAllInvestments,
 } = require("../controllers/adminController");
+const {
+  getAllConversations,
+  getThread,
+  replyToUser,
+  deleteMessageAdmin,
+} = require("../controllers/messageController");
 const { protect, adminOnly } = require("../middleware/auth");
 
 router.use(protect, adminOnly);
@@ -33,5 +39,11 @@ router.put("/withdrawals/:id", updateWithdrawalStatus);
 
 // Investments
 router.get("/investments", getAllInvestments);
+
+// Messages
+router.get("/messages", getAllConversations);
+router.get("/messages/:userId", getThread);
+router.post("/messages/:userId/reply", replyToUser);
+router.delete("/messages/:messageId", deleteMessageAdmin);
 
 module.exports = router;

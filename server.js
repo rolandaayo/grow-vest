@@ -15,6 +15,7 @@ const investmentRoutes = require("./routes/investmentRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
 const withdrawalRoutes = require("./routes/withdrawalRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const messageRoutes = require("./routes/messageRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
@@ -116,6 +117,7 @@ app.use("/api/investments", investmentRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/withdrawals", withdrawalRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/messages", messageRoutes);
 app.use("/api/admin", adminRoutes);
 
 // ─── 404 ──────────────────────────────────────────────────────────────────────
