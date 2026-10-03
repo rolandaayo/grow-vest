@@ -20,7 +20,7 @@ const transactionSchema = new mongoose.Schema(
     },
 
     amount: { type: Number, required: true }, // positive always
-    fee:    { type: Number, default: 0 },
+    fee: { type: Number, default: 0 },
 
     description: { type: String, required: true },
 
@@ -38,19 +38,18 @@ const transactionSchema = new mongoose.Schema(
 
     // For deposits / withdrawals
     paymentMethod: { type: String }, // e.g. "Bank Transfer · Chase Bank"
-    bankName:      { type: String },
-    accountLast4:  { type: String },
+    bankName: { type: String },
+    accountLast4: { type: String },
 
     // Balance snapshot after transaction
     balanceAfter: { type: Number },
 
     metadata: { type: mongoose.Schema.Types.Mixed },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Index for fast user transaction lookups
 transactionSchema.index({ user: 1, createdAt: -1 });
-transactionSchema.index({ reference: 1 }, { unique: true });
 
 module.exports = mongoose.model("Transaction", transactionSchema);
