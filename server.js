@@ -70,22 +70,7 @@ app.use(express.urlencoded({ extended: true }));
 
 if (process.env.NODE_ENV !== "production") app.use(morgan("dev"));
 
-// ─── Lazy DB middleware ───────────────────────────────────────────────────────
-// For Vercel serverless: connect on first request, reuse after
-app.use(async (req, res, next) => {
-  try {
-    await connectDB();
-    next();
-  } catch (err) {
-    return res.status(503).json({
-      success: false,
-      message: "Database unavailable. Please try again in a moment.",
-      detail: process.env.NODE_ENV !== "production" ? err.message : undefined,
-    });
-  }
-});
-
-// ─── Health check ─────────────────────────────────────────────────────────────
+// ─── Health + debug (BEFORE DB middleware — always available) ─────────────────
 app.get("/api/health", (req, res) => {
   res.status(200).json({
     success: true,
@@ -93,6 +78,35 @@ app.get("/api/health", (req, res) => {
     environment: process.env.NODE_ENV,
     timestamp: new Date().toISOString(),
   });
+});
+
+// Shows env var status — helps diagnose Vercel config issues
+app.get("/api/debug-env", (req, res) => {
+  const uri = process.env.MONGO_URI || "";
+  res.status(200).json({
+    MONGO_URI_SET: !!uri && !uri.includes("<cluster-host>"),
+    MONGO_URI_PREVIEW: uri ? uri.substring(0, 35) + "..." : "NOT SET",
+    JWT_SECRET_SET: !!process.env.JWT_SECRET,
+    CLIENT_URL: process.env.CLIENT_URL || "NOT SET",
+    NODE_ENV: process.env.NODE_ENV || "NOT SET",
+  });
+});
+
+// ─── Lazy DB middleware ───────────────────────────────────────────────────────
+// For Vercel serverless: connect on first request, reuse after
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error("DB connection failed:", err.message);
+    return res.status(503).json({
+      success: false,
+      message: "Database unavailable. Please try again in a moment.",
+      // Always show detail so you can diagnose from Vercel logs
+      detail: err.message,
+    });
+  }
 });
 
 // ─── API routes ───────────────────────────────────────────────────────────────
