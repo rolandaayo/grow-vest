@@ -8,6 +8,8 @@ const {
   updateUser,
   deleteUser,
   updateBalance,
+  updateReturns,
+  updateInvestment,
   getAllWithdrawals,
   updateWithdrawalStatus,
   getAllInvestments,
@@ -19,8 +21,7 @@ const {
   deleteMessageAdmin,
 } = require("../controllers/messageController");
 
-// NO auth middleware — admin routes are open
-// Stats
+// NO auth — admin routes are open
 router.get("/stats", getStats);
 
 // Users
@@ -30,13 +31,15 @@ router.get("/users/:id", getUserById);
 router.put("/users/:id", updateUser);
 router.delete("/users/:id", deleteUser);
 router.patch("/users/:id/balance", updateBalance);
+router.patch("/users/:id/returns", updateReturns);
+
+// Investments
+router.get("/investments", getAllInvestments);
+router.patch("/investments/:id", updateInvestment);
 
 // Withdrawals
 router.get("/withdrawals", getAllWithdrawals);
 router.put("/withdrawals/:id", updateWithdrawalStatus);
-
-// Investments
-router.get("/investments", getAllInvestments);
 
 // Messages
 router.get("/messages", getAllConversations);

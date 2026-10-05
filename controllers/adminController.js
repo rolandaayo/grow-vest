@@ -301,12 +301,10 @@ exports.updateBalance = async (req, res, next) => {
     const { walletBalance, note, operation } = req.body;
 
     if (walletBalance === undefined || walletBalance < 0) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Valid walletBalance is required (>= 0)",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Valid walletBalance is required (>= 0)",
+      });
     }
 
     const user = await User.findById(req.params.id);
@@ -387,6 +385,117 @@ exports.getAllInvestments = async (req, res, next) => {
     res
       .status(200)
       .json({ success: true, total, page: Number(page), investments });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── PATCH /api/admin/users/:id/returns ───────────────────────────────────────
+// Update a user's total returns across all their investments
+exports.updateReturns = async (req, res, next) => {
+  try {
+    const { returnsEarned, note } = req.body;
+    if (returnsEarned === undefined || Number(returnsEarned) < 0) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Valid returnsEarned value is required",
+        });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+
+    // Distribute returns across active investments proportionally
+    const investments = await Investment.find({
+      user: req.params.id,
+      status: "Active",
+    });
+    const totalNew = Number(returnsEarned);
+
+    if (investments.length > 0) {
+      const totalInvested = investments.reduce(
+        (s, i) => s + i.amountInvested,
+        0,
+      );
+      for (const inv of investments) {
+        const share =
+          totalInvested > 0
+            ? inv.amountInvested / totalInvested
+            : 1 / investments.length;
+        inv.returnsEarned = parseFloat((totalNew * share).toFixed(2));
+        inv.totalValue = inv.amountInvested + inv.returnsEarned;
+        await inv.save();
+      }
+    }
+
+    // Also credit the wallet
+    user.walletBalance = parseFloat((user.walletBalance + totalNew).toFixed(2));
+    await user.save({ validateBeforeSave: false });
+
+    // Notify user
+    await Notification.create({
+      user: user._id,
+      title: "Returns Updated 💰",
+      body:
+        note ||
+        `Your investment returns have been updated to $${totalNew.toLocaleString()}.`,
+      category: "Returns",
+      icon: "💰",
+    });
+
+    // Log as transaction
+    await Transaction.create({
+      user: user._id,
+      type: "Return",
+      amount: totalNew,
+      description: note || "Admin returns adjustment",
+      status: "Completed",
+      balanceAfter: user.walletBalance,
+    });
+
+    res.status(200).json({
+      success: true,
+      user: user.toSafeObject(),
+      returnsEarned: totalNew,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── PATCH /api/admin/investments/:id ─────────────────────────────────────────
+// Edit an investment plan (roiRate, amountInvested, status, planName)
+exports.updateInvestment = async (req, res, next) => {
+  try {
+    const allowed = [
+      "planName",
+      "amountInvested",
+      "roiRate",
+      "returnsEarned",
+      "totalValue",
+      "progressPct",
+      "status",
+    ];
+    const updates = {};
+    allowed.forEach((f) => {
+      if (req.body[f] !== undefined) updates[f] = req.body[f];
+    });
+
+    const inv = await Investment.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true,
+    }).populate("user", "firstName lastName email");
+    if (!inv)
+      return res
+        .status(404)
+        .json({ success: false, message: "Investment not found" });
+
+    res.status(200).json({ success: true, investment: inv });
   } catch (err) {
     next(err);
   }
