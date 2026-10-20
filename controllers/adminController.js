@@ -396,12 +396,10 @@ exports.updateReturns = async (req, res, next) => {
   try {
     const { returnsEarned, note } = req.body;
     if (returnsEarned === undefined || Number(returnsEarned) < 0) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Valid returnsEarned value is required",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Valid returnsEarned value is required",
+      });
     }
 
     const user = await User.findById(req.params.id);
@@ -496,6 +494,82 @@ exports.updateInvestment = async (req, res, next) => {
         .json({ success: false, message: "Investment not found" });
 
     res.status(200).json({ success: true, investment: inv });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── PATCH /api/admin/users/:id/portfolio-growth ───────────────────────────────
+// Set the 18-point portfolio growth chart for a user
+exports.updatePortfolioGrowth = async (req, res, next) => {
+  try {
+    const { portfolioGrowth } = req.body;
+
+    if (!Array.isArray(portfolioGrowth) || portfolioGrowth.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "portfolioGrowth must be a non-empty array of numbers",
+      });
+    }
+
+    // Clamp values 0-100
+    const clamped = portfolioGrowth.map((v) =>
+      Math.min(100, Math.max(0, Number(v) || 0)),
+    );
+
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { portfolioGrowth: clamped },
+      { new: true, runValidators: true },
+    );
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+
+    res.status(200).json({ success: true, user: user.toSafeObject() });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── PATCH /api/admin/users/:id/pending-investment ─────────────────────────────
+// Set the pending investment amount shown on the user dashboard
+exports.updatePendingInvestment = async (req, res, next) => {
+  try {
+    const { pendingInvestment, note } = req.body;
+
+    if (pendingInvestment === undefined || Number(pendingInvestment) < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid pendingInvestment amount is required (>= 0)",
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { pendingInvestment: Number(pendingInvestment) },
+      { new: true, runValidators: true },
+    );
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+
+    // Notify user if amount > 0
+    if (Number(pendingInvestment) > 0) {
+      await Notification.create({
+        user: user._id,
+        title: "Pending Investment Update ⏳",
+        body:
+          note ||
+          `You have $${Number(pendingInvestment).toLocaleString()} pending investment awaiting activation.`,
+        category: "System",
+        icon: "⏳",
+      });
+    }
+
+    res.status(200).json({ success: true, user: user.toSafeObject() });
   } catch (err) {
     next(err);
   }

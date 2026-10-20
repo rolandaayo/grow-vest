@@ -16,9 +16,21 @@ exports.getProfile = async (req, res, next) => {
 // ── PUT /api/users/profile ───────────────────────────────────────────────────
 exports.updateProfile = async (req, res, next) => {
   try {
-    const allowed = ["firstName", "lastName", "phone", "country", "city", "dob", "occupation", "bio", "avatarUrl"];
+    const allowed = [
+      "firstName",
+      "lastName",
+      "phone",
+      "country",
+      "city",
+      "dob",
+      "occupation",
+      "bio",
+      "avatarUrl",
+    ];
     const updates = {};
-    allowed.forEach((f) => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+    allowed.forEach((f) => {
+      if (req.body[f] !== undefined) updates[f] = req.body[f];
+    });
 
     const user = await User.findByIdAndUpdate(req.user.id, updates, {
       new: true,
@@ -44,14 +56,23 @@ exports.getBankAccounts = async (req, res, next) => {
 // ── POST /api/users/bank-accounts ────────────────────────────────────────────
 exports.addBankAccount = async (req, res, next) => {
   try {
-    const { bankName, accountNumber, accountName, routingNumber, isDefault } = req.body;
+    const { bankName, accountNumber, accountName, routingNumber, isDefault } =
+      req.body;
     const user = await User.findById(req.user.id);
 
     if (isDefault) {
-      user.bankAccounts.forEach((b) => { b.isDefault = false; });
+      user.bankAccounts.forEach((b) => {
+        b.isDefault = false;
+      });
     }
 
-    user.bankAccounts.push({ bankName, accountNumber, accountName, routingNumber, isDefault: !!isDefault });
+    user.bankAccounts.push({
+      bankName,
+      accountNumber,
+      accountName,
+      routingNumber,
+      isDefault: !!isDefault,
+    });
     await user.save();
 
     res.status(201).json({ success: true, bankAccounts: user.bankAccounts });
@@ -65,7 +86,7 @@ exports.removeBankAccount = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id);
     user.bankAccounts = user.bankAccounts.filter(
-      (b) => b._id.toString() !== req.params.accountId
+      (b) => b._id.toString() !== req.params.accountId,
     );
     await user.save();
     res.status(200).json({ success: true, bankAccounts: user.bankAccounts });
@@ -85,8 +106,10 @@ exports.getDashboard = async (req, res, next) => {
     ]);
 
     const totalInvested = investments.reduce((s, i) => s + i.amountInvested, 0);
-    const totalReturns  = investments.reduce((s, i) => s + i.returnsEarned, 0);
+    const totalReturns = investments.reduce((s, i) => s + i.returnsEarned, 0);
     const portfolioValue = totalInvested + totalReturns;
+
+    const user = await User.findById(userId);
 
     res.status(200).json({
       success: true,
@@ -96,6 +119,11 @@ exports.getDashboard = async (req, res, next) => {
         totalReturns,
         activePlans: investments.length,
         walletBalance: req.user.walletBalance,
+        portfolioGrowth: user?.portfolioGrowth || [
+          12, 18, 25, 32, 40, 48, 55, 62, 68, 72, 76, 80, 84, 86, 88, 90, 93,
+          100,
+        ],
+        pendingInvestment: user?.pendingInvestment || 0,
         investments,
         recentTransactions: recentTxns,
       },

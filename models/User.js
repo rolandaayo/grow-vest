@@ -1,27 +1,36 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
-const bankAccountSchema = new mongoose.Schema({
-  bankName:      { type: String, required: true },
-  accountNumber: { type: String, required: true },
-  accountName:   { type: String, required: true },
-  routingNumber: { type: String },
-  isDefault:     { type: Boolean, default: false },
-}, { _id: true });
+const bankAccountSchema = new mongoose.Schema(
+  {
+    bankName: { type: String, required: true },
+    accountNumber: { type: String, required: true },
+    accountName: { type: String, required: true },
+    routingNumber: { type: String },
+    isDefault: { type: Boolean, default: false },
+  },
+  { _id: true },
+);
 
 const userSchema = new mongoose.Schema(
   {
-    firstName:   { type: String, required: true, trim: true },
-    lastName:    { type: String, required: true, trim: true },
-    email:       { type: String, required: true, unique: true, lowercase: true, trim: true },
-    phone:       { type: String, trim: true },
-    password:    { type: String, required: true, minlength: 8, select: false },
-    country:     { type: String, default: "United States" },
-    city:        { type: String },
-    dob:         { type: Date },
-    occupation:  { type: String },
-    bio:         { type: String },
-    avatarUrl:   { type: String },
+    firstName: { type: String, required: true, trim: true },
+    lastName: { type: String, required: true, trim: true },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+    },
+    phone: { type: String, trim: true },
+    password: { type: String, required: true, minlength: 8, select: false },
+    country: { type: String, default: "United States" },
+    city: { type: String },
+    dob: { type: Date },
+    occupation: { type: String },
+    bio: { type: String },
+    avatarUrl: { type: String },
 
     role: {
       type: String,
@@ -36,10 +45,14 @@ const userSchema = new mongoose.Schema(
     },
 
     kyc: {
-      status:       { type: String, enum: ["Pending", "Verified", "Rejected"], default: "Pending" },
-      submittedAt:  { type: Date },
-      reviewedAt:   { type: Date },
-      notes:        { type: String },
+      status: {
+        type: String,
+        enum: ["Pending", "Verified", "Rejected"],
+        default: "Pending",
+      },
+      submittedAt: { type: Date },
+      reviewedAt: { type: Date },
+      notes: { type: String },
     },
 
     // Email verification
@@ -48,8 +61,8 @@ const userSchema = new mongoose.Schema(
     emailVerifyExpires: { type: Date, select: false },
 
     // Password reset
-    resetPasswordToken:   { type: String, select: false },
-    resetPasswordExpires: { type: Date,   select: false },
+    resetPasswordToken: { type: String, select: false },
+    resetPasswordExpires: { type: Date, select: false },
 
     // 2FA
     twoFactorEnabled: { type: Boolean, default: false },
@@ -57,18 +70,29 @@ const userSchema = new mongoose.Schema(
     // Wallet
     walletBalance: { type: Number, default: 0, min: 0 },
 
+    // Portfolio growth chart data (18 data points from 2009–2026, values 0–100)
+    portfolioGrowth: {
+      type: [Number],
+      default: [
+        12, 18, 25, 32, 40, 48, 55, 62, 68, 72, 76, 80, 84, 86, 88, 90, 93, 100,
+      ],
+    },
+
+    // Pending investment amount (shown on dashboard as "Pending Investment")
+    pendingInvestment: { type: Number, default: 0, min: 0 },
+
     // Linked bank accounts
     bankAccounts: [bankAccountSchema],
 
     // Referral
-    referralCode:   { type: String, unique: true, sparse: true },
-    referredBy:     { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    referralBonus:  { type: Number, default: 0 },
+    referralCode: { type: String, unique: true, sparse: true },
+    referredBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    referralBonus: { type: Number, default: 0 },
 
     lastLoginAt: { type: Date },
     lastLoginIp: { type: String },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // ── Virtuals ────────────────────────────────────────────────────────────────

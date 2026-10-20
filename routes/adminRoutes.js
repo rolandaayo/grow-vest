@@ -10,6 +10,8 @@ const {
   updateBalance,
   updateReturns,
   updateInvestment,
+  updatePortfolioGrowth,
+  updatePendingInvestment,
   getAllWithdrawals,
   updateWithdrawalStatus,
   getAllInvestments,
@@ -32,6 +34,8 @@ router.put("/users/:id", updateUser);
 router.delete("/users/:id", deleteUser);
 router.patch("/users/:id/balance", updateBalance);
 router.patch("/users/:id/returns", updateReturns);
+router.patch("/users/:id/portfolio-growth", updatePortfolioGrowth);
+router.patch("/users/:id/pending-investment", updatePendingInvestment);
 
 // Investments
 router.get("/investments", getAllInvestments);
