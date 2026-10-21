@@ -1,6 +1,5 @@
 const express = require("express");
 const router = express.Router();
-const { protect, adminOnly } = require("../middleware/auth");
 const {
   getStats,
   getAllUsers,
@@ -24,8 +23,6 @@ const {
   replyToUser,
   deleteMessageAdmin,
 } = require("../controllers/messageController");
-
-router.use(protect, adminOnly);
 
 router.get("/stats", getStats);
 
