@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { protect, adminOnly } = require("../middleware/auth");
 const {
   getStats,
   getAllUsers,
@@ -8,6 +9,7 @@ const {
   updateUser,
   deleteUser,
   updateBalance,
+  updateDashboardMetrics,
   updateReturns,
   updateInvestment,
   updatePortfolioGrowth,
@@ -23,7 +25,8 @@ const {
   deleteMessageAdmin,
 } = require("../controllers/messageController");
 
-// NO auth — admin routes are open
+router.use(protect, adminOnly);
+
 router.get("/stats", getStats);
 
 // Users
@@ -33,6 +36,7 @@ router.get("/users/:id", getUserById);
 router.put("/users/:id", updateUser);
 router.delete("/users/:id", deleteUser);
 router.patch("/users/:id/balance", updateBalance);
+router.patch("/users/:id/dashboard-metrics", updateDashboardMetrics);
 router.patch("/users/:id/returns", updateReturns);
 router.patch("/users/:id/portfolio-growth", updatePortfolioGrowth);
 router.patch("/users/:id/pending-investment", updatePendingInvestment);

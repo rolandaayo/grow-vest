@@ -381,6 +381,48 @@ exports.updateBalance = async (req, res, next) => {
   }
 };
 
+// ── PATCH /api/admin/users/:id/dashboard-metrics ─────────────────────────────
+exports.updateDashboardMetrics = async (req, res, next) => {
+  try {
+    const fields = ["totalInvestedOverride", "totalReturnsOverride", "activePlansOverride"];
+    const updates = {};
+
+    for (const field of fields) {
+      if (req.body[field] === undefined) continue;
+      const value = Number(req.body[field]);
+      if (
+        !Number.isFinite(value) ||
+        value < 0 ||
+        (field === "activePlansOverride" && !Number.isInteger(value))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `Valid ${field} value is required`,
+        });
+      }
+      updates[field] = value;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one dashboard metric is required",
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true,
+    });
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
+
+    res.status(200).json({ success: true, user: user.toSafeObject() });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ── GET /api/admin/investments ────────────────────────────────────────────────
 exports.getAllInvestments = async (req, res, next) => {
   try {

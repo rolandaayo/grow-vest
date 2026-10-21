@@ -112,7 +112,12 @@ exports.getDashboard = async (req, res, next) => {
     );
     const totalInvested =
       user?.totalInvestedOverride ?? calculatedTotalInvested;
-    const totalReturns = investments.reduce((s, i) => s + i.returnsEarned, 0);
+    const calculatedTotalReturns = investments.reduce(
+      (s, i) => s + i.returnsEarned,
+      0,
+    );
+    const totalReturns =
+      user?.totalReturnsOverride ?? calculatedTotalReturns;
     const portfolioValue = totalInvested + totalReturns;
 
     res.status(200).json({
@@ -121,7 +126,7 @@ exports.getDashboard = async (req, res, next) => {
         portfolioValue,
         totalInvested,
         totalReturns,
-        activePlans: investments.length,
+        activePlans: user?.activePlansOverride ?? investments.length,
         walletBalance: req.user.walletBalance,
         portfolioGrowth: user?.portfolioGrowth || [
           12, 18, 25, 32, 40, 48, 55, 62, 68, 72, 76, 80, 84, 86, 88, 90, 93,

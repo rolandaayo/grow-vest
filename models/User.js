@@ -72,6 +72,8 @@ const userSchema = new mongoose.Schema(
 
     // Admin-set total invested value; null keeps the dashboard investment-derived.
     totalInvestedOverride: { type: Number, default: null, min: 0 },
+    totalReturnsOverride: { type: Number, default: null, min: 0 },
+    activePlansOverride: { type: Number, default: null, min: 0 },
 
     // Portfolio growth chart data (18 data points from 2009–2026, values 0–100)
     portfolioGrowth: {
