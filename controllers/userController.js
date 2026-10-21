@@ -100,16 +100,20 @@ exports.getDashboard = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    const [investments, recentTxns] = await Promise.all([
+    const [investments, recentTxns, user] = await Promise.all([
       Investment.find({ user: userId, status: "Active" }),
       Transaction.find({ user: userId }).sort({ createdAt: -1 }).limit(5),
+      User.findById(userId),
     ]);
 
-    const totalInvested = investments.reduce((s, i) => s + i.amountInvested, 0);
+    const calculatedTotalInvested = investments.reduce(
+      (s, i) => s + i.amountInvested,
+      0,
+    );
+    const totalInvested =
+      user?.totalInvestedOverride ?? calculatedTotalInvested;
     const totalReturns = investments.reduce((s, i) => s + i.returnsEarned, 0);
     const portfolioValue = totalInvested + totalReturns;
-
-    const user = await User.findById(userId);
 
     res.status(200).json({
       success: true,
@@ -123,6 +127,7 @@ exports.getDashboard = async (req, res, next) => {
           12, 18, 25, 32, 40, 48, 55, 62, 68, 72, 76, 80, 84, 86, 88, 90, 93,
           100,
         ],
+        portfolioGrowthValue: user?.portfolioGrowthValue ?? 0,
         pendingInvestment: user?.pendingInvestment || 0,
         investments,
         recentTransactions: recentTxns,

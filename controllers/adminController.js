@@ -299,8 +299,9 @@ exports.createUser = async (req, res, next) => {
 exports.updateBalance = async (req, res, next) => {
   try {
     const { walletBalance, note, operation } = req.body;
+    const amount = Number(walletBalance);
 
-    if (walletBalance === undefined || walletBalance < 0) {
+    if (walletBalance === undefined || !Number.isFinite(amount) || amount < 0) {
       return res.status(400).json({
         success: false,
         message: "Valid walletBalance is required (>= 0)",
@@ -313,19 +314,34 @@ exports.updateBalance = async (req, res, next) => {
         .status(404)
         .json({ success: false, message: "User not found" });
 
+    const activeInvestments = await Investment.find({
+      user: user._id,
+      status: "Active",
+    }).select("amountInvested");
     const prev = user.walletBalance;
+    const previousInvested =
+      user.totalInvestedOverride ??
+      activeInvestments.reduce(
+        (total, investment) => total + investment.amountInvested,
+        0,
+      );
     let newBalance;
+    let newTotalInvested;
 
     if (operation === "add") {
-      newBalance = prev + Number(walletBalance);
+      newBalance = prev + amount;
+      newTotalInvested = previousInvested + amount;
     } else if (operation === "subtract") {
-      newBalance = Math.max(0, prev - Number(walletBalance));
+      newBalance = Math.max(0, prev - amount);
+      newTotalInvested = Math.max(0, previousInvested - amount);
     } else {
       // default: set absolute value
-      newBalance = Number(walletBalance);
+      newBalance = amount;
+      newTotalInvested = amount;
     }
 
     user.walletBalance = newBalance;
+    user.totalInvestedOverride = newTotalInvested;
     await user.save({ validateBeforeSave: false });
 
     // Log as a transaction so it shows in user's history
@@ -357,6 +373,7 @@ exports.updateBalance = async (req, res, next) => {
       user: user.toSafeObject(),
       previousBalance: prev,
       newBalance,
+      newTotalInvested,
       difference: diff,
     });
   } catch (err) {
@@ -503,12 +520,22 @@ exports.updateInvestment = async (req, res, next) => {
 // Set the 18-point portfolio growth chart for a user
 exports.updatePortfolioGrowth = async (req, res, next) => {
   try {
-    const { portfolioGrowth } = req.body;
+    const { portfolioGrowth, portfolioGrowthValue } = req.body;
 
     if (!Array.isArray(portfolioGrowth) || portfolioGrowth.length === 0) {
       return res.status(400).json({
         success: false,
         message: "portfolioGrowth must be a non-empty array of numbers",
+      });
+    }
+    if (
+      portfolioGrowthValue !== undefined &&
+      (!Number.isFinite(Number(portfolioGrowthValue)) ||
+        Number(portfolioGrowthValue) < 0)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "portfolioGrowthValue must be a valid amount (>= 0)",
       });
     }
 
@@ -519,7 +546,12 @@ exports.updatePortfolioGrowth = async (req, res, next) => {
 
     const user = await User.findByIdAndUpdate(
       req.params.id,
-      { portfolioGrowth: clamped },
+      {
+        portfolioGrowth: clamped,
+        ...(portfolioGrowthValue !== undefined
+          ? { portfolioGrowthValue: Number(portfolioGrowthValue) }
+          : {}),
+      },
       { new: true, runValidators: true },
     );
     if (!user)

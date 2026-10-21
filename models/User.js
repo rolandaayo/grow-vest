@@ -70,8 +70,8 @@ const userSchema = new mongoose.Schema(
     // Wallet
     walletBalance: { type: Number, default: 0, min: 0 },
 
-    // Admin-set total invested override (shown on dashboard when no real investments exist)
-    totalInvestedOverride: { type: Number, default: 0, min: 0 },
+    // Admin-set total invested value; null keeps the dashboard investment-derived.
+    totalInvestedOverride: { type: Number, default: null, min: 0 },
 
     // Portfolio growth chart data (18 data points from 2009–2026, values 0–100)
     portfolioGrowth: {
@@ -80,6 +80,7 @@ const userSchema = new mongoose.Schema(
         12, 18, 25, 32, 40, 48, 55, 62, 68, 72, 76, 80, 84, 86, 88, 90, 93, 100,
       ],
     },
+    portfolioGrowthValue: { type: Number, default: 0, min: 0 },
 
     // Pending investment amount (shown on dashboard as "Pending Investment")
     pendingInvestment: { type: Number, default: 0, min: 0 },
