@@ -37,5 +37,9 @@ exports.protect = async (req, res, next) => {
 // Admin only
 exports.adminOnly = (req, res, next) => {
   if (req.user && req.user.role === "admin") return next();
-  return res.status(403).json({ success: false, message: "Admin access required" });
+  return res.status(403).json({
+    success: false,
+    message:
+      "This account does not have administrator permissions. Sign in with an admin account.",
+  });
 };
