@@ -70,6 +70,9 @@ const userSchema = new mongoose.Schema(
     // Wallet
     walletBalance: { type: Number, default: 0, min: 0 },
 
+    // Admin-set total invested override (shown on dashboard when no real investments exist)
+    totalInvestedOverride: { type: Number, default: 0, min: 0 },
+
     // Portfolio growth chart data (18 data points from 2009–2026, values 0–100)
     portfolioGrowth: {
       type: [Number],
