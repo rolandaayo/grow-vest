@@ -101,9 +101,7 @@ exports.getUserById = async (req, res, next) => {
 
     const [investments, transactions, withdrawals] = await Promise.all([
       Investment.find({ user: user._id }).sort({ createdAt: -1 }),
-      Transaction.find({ user: user._id, type: "Deposit" }).sort({
-        createdAt: -1,
-      }),
+      Transaction.find({ user: user._id }).sort({ createdAt: -1 }),
       Withdrawal.find({ user: user._id }).sort({ createdAt: -1 }),
     ]);
 
@@ -216,9 +214,10 @@ exports.updateWithdrawalStatus = async (req, res, next) => {
       "Reversed",
     ];
     if (!allowedStatuses.includes(status)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Valid withdrawal status is required" });
+      return res.status(400).json({
+        success: false,
+        message: "Valid withdrawal status is required",
+      });
     }
 
     const withdrawal = await Withdrawal.findById(req.params.id).populate(
@@ -234,7 +233,9 @@ exports.updateWithdrawalStatus = async (req, res, next) => {
     const willBeRefunded = ["Failed", "Reversed"].includes(status);
     const user = withdrawal.user;
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     let balanceChange = 0;
     if (wasRefunded !== willBeRefunded) {
@@ -318,14 +319,17 @@ exports.updateDepositTransaction = async (req, res, next) => {
         .json({ success: false, message: "Amount must be greater than zero" });
     }
     if (!allowedStatuses.includes(status)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Valid transaction status is required" });
+      return res.status(400).json({
+        success: false,
+        message: "Valid transaction status is required",
+      });
     }
 
     const user = await User.findById(transaction.user);
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     const previousCredit =
       transaction.status === "Completed" ? transaction.amount : 0;
@@ -334,14 +338,14 @@ exports.updateDepositTransaction = async (req, res, next) => {
     if (user.walletBalance + balanceChange < 0) {
       return res.status(400).json({
         success: false,
-        message: "The deposit cannot be reduced because the funds have been spent",
+        message:
+          "The deposit cannot be reduced because the funds have been spent",
       });
     }
 
     if (
       req.body.description !== undefined &&
-      (typeof req.body.description !== "string" ||
-        !req.body.description.trim())
+      (typeof req.body.description !== "string" || !req.body.description.trim())
     ) {
       return res
         .status(400)
@@ -427,9 +431,10 @@ exports.updateWithdrawalDetails = async (req, res, next) => {
       });
     }
     if (!allowedStatuses.includes(status)) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Valid withdrawal status is required" });
+      return res.status(400).json({
+        success: false,
+        message: "Valid withdrawal status is required",
+      });
     }
 
     for (const field of ["bankName", "accountNumber", "accountName"]) {
@@ -455,7 +460,9 @@ exports.updateWithdrawalDetails = async (req, res, next) => {
 
     const user = await User.findById(withdrawal.user);
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     const wasRefunded = ["Failed", "Reversed"].includes(withdrawal.status);
     const willBeRefunded = ["Failed", "Reversed"].includes(status);
@@ -681,7 +688,11 @@ exports.updateBalance = async (req, res, next) => {
 // ── PATCH /api/admin/users/:id/dashboard-metrics ─────────────────────────────
 exports.updateDashboardMetrics = async (req, res, next) => {
   try {
-    const fields = ["totalInvestedOverride", "totalReturnsOverride", "activePlansOverride"];
+    const fields = [
+      "totalInvestedOverride",
+      "totalReturnsOverride",
+      "activePlansOverride",
+    ];
     const updates = {};
 
     for (const field of fields) {
@@ -712,7 +723,9 @@ exports.updateDashboardMetrics = async (req, res, next) => {
       runValidators: true,
     });
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     res.status(200).json({ success: true, user: user.toSafeObject() });
   } catch (err) {
@@ -939,6 +952,145 @@ exports.updatePendingInvestment = async (req, res, next) => {
         icon: "⏳",
       });
     }
+
+    res.status(200).json({ success: true, user: user.toSafeObject() });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── POST /api/admin/users/:id/transactions ────────────────────────────────────
+exports.createTransaction = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+
+    const {
+      type,
+      amount,
+      description,
+      status,
+      bankName,
+      accountLast4,
+      paymentMethod,
+      createdAt,
+    } = req.body;
+
+    const allowedTypes = [
+      "Deposit",
+      "Withdrawal",
+      "Return",
+      "Investment",
+      "Referral Bonus",
+    ];
+    const allowedStatuses = [
+      "Pending",
+      "Processing",
+      "Completed",
+      "Failed",
+      "Reversed",
+    ];
+
+    if (!allowedTypes.includes(type)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid transaction type" });
+    }
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Amount must be greater than zero" });
+    }
+    if (!description || !description.trim()) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Description is required" });
+    }
+    const resolvedStatus = allowedStatuses.includes(status)
+      ? status
+      : "Completed";
+
+    // Adjust wallet balance for Completed Deposit or Return
+    if (
+      resolvedStatus === "Completed" &&
+      ["Deposit", "Return", "Referral Bonus"].includes(type)
+    ) {
+      user.walletBalance += parsedAmount;
+      await user.save({ validateBeforeSave: false });
+    }
+
+    const txnData = {
+      user: user._id,
+      type,
+      amount: parsedAmount,
+      description: description.trim(),
+      status: resolvedStatus,
+      bankName: bankName || undefined,
+      accountLast4: accountLast4 || undefined,
+      paymentMethod: paymentMethod || undefined,
+      balanceAfter: user.walletBalance,
+    };
+
+    // Allow admin to set a custom date/time
+    if (createdAt) {
+      const parsed = new Date(createdAt);
+      if (!isNaN(parsed.getTime())) {
+        txnData.createdAt = parsed;
+        txnData.updatedAt = parsed;
+      }
+    }
+
+    const transaction = await Transaction.create(txnData);
+
+    // If custom date was set, patch it directly (Mongoose timestamps can override)
+    if (createdAt) {
+      const parsed = new Date(createdAt);
+      if (!isNaN(parsed.getTime())) {
+        await Transaction.updateOne(
+          { _id: transaction._id },
+          { $set: { createdAt: parsed, updatedAt: parsed } },
+        );
+        transaction.createdAt = parsed;
+      }
+    }
+
+    res
+      .status(201)
+      .json({ success: true, transaction, user: user.toSafeObject() });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── DELETE /api/admin/transactions/:id ────────────────────────────────────────
+exports.deleteTransaction = async (req, res, next) => {
+  try {
+    const transaction = await Transaction.findById(req.params.id);
+    if (!transaction)
+      return res
+        .status(404)
+        .json({ success: false, message: "Transaction not found" });
+
+    const user = await User.findById(transaction.user);
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+
+    // Reverse the balance effect of completed credits
+    if (
+      transaction.status === "Completed" &&
+      ["Deposit", "Return", "Referral Bonus"].includes(transaction.type)
+    ) {
+      user.walletBalance = Math.max(0, user.walletBalance - transaction.amount);
+      await user.save({ validateBeforeSave: false });
+    }
+
+    await transaction.deleteOne();
 
     res.status(200).json({ success: true, user: user.toSafeObject() });
   } catch (err) {

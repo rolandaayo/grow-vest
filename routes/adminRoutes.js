@@ -18,6 +18,8 @@ const {
   updateWithdrawalDetails,
   updateDepositTransaction,
   getAllInvestments,
+  createTransaction,
+  deleteTransaction,
 } = require("../controllers/adminController");
 const {
   getAllConversations,
@@ -45,7 +47,9 @@ router.get("/investments", getAllInvestments);
 router.patch("/investments/:id", updateInvestment);
 
 // User transaction history
+router.post("/users/:id/transactions", createTransaction);
 router.patch("/transactions/:id", updateDepositTransaction);
+router.delete("/transactions/:id", deleteTransaction);
 
 // Withdrawals
 router.get("/withdrawals", getAllWithdrawals);
