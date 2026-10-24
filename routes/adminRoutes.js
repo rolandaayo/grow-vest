@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { protect, adminOnly } = require("../middleware/auth");
 const {
   getStats,
   getAllUsers,
@@ -15,6 +16,8 @@ const {
   updatePendingInvestment,
   getAllWithdrawals,
   updateWithdrawalStatus,
+  updateWithdrawalDetails,
+  updateDepositTransaction,
   getAllInvestments,
 } = require("../controllers/adminController");
 const {
@@ -23,6 +26,8 @@ const {
   replyToUser,
   deleteMessageAdmin,
 } = require("../controllers/messageController");
+
+router.use(protect, adminOnly);
 
 router.get("/stats", getStats);
 
@@ -42,9 +47,13 @@ router.patch("/users/:id/pending-investment", updatePendingInvestment);
 router.get("/investments", getAllInvestments);
 router.patch("/investments/:id", updateInvestment);
 
+// User transaction history
+router.patch("/transactions/:id", updateDepositTransaction);
+
 // Withdrawals
 router.get("/withdrawals", getAllWithdrawals);
 router.put("/withdrawals/:id", updateWithdrawalStatus);
+router.patch("/withdrawals/:id", updateWithdrawalDetails);
 
 // Messages
 router.get("/messages", getAllConversations);

@@ -101,8 +101,10 @@ exports.getUserById = async (req, res, next) => {
 
     const [investments, transactions, withdrawals] = await Promise.all([
       Investment.find({ user: user._id }).sort({ createdAt: -1 }),
-      Transaction.find({ user: user._id }).sort({ createdAt: -1 }).limit(10),
-      Withdrawal.find({ user: user._id }).sort({ createdAt: -1 }).limit(10),
+      Transaction.find({ user: user._id, type: "Deposit" }).sort({
+        createdAt: -1,
+      }),
+      Withdrawal.find({ user: user._id }).sort({ createdAt: -1 }),
     ]);
 
     res.status(200).json({
@@ -206,6 +208,19 @@ exports.getAllWithdrawals = async (req, res, next) => {
 exports.updateWithdrawalStatus = async (req, res, next) => {
   try {
     const { status, adminNote } = req.body;
+    const allowedStatuses = [
+      "Pending",
+      "Processing",
+      "Completed",
+      "Failed",
+      "Reversed",
+    ];
+    if (!allowedStatuses.includes(status)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Valid withdrawal status is required" });
+    }
+
     const withdrawal = await Withdrawal.findById(req.params.id).populate(
       "user",
     );
@@ -215,22 +230,49 @@ exports.updateWithdrawalStatus = async (req, res, next) => {
         .json({ success: false, message: "Withdrawal not found" });
 
     const prevStatus = withdrawal.status;
+    const wasRefunded = ["Failed", "Reversed"].includes(prevStatus);
+    const willBeRefunded = ["Failed", "Reversed"].includes(status);
+    const user = withdrawal.user;
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
+
+    let balanceChange = 0;
+    if (wasRefunded !== willBeRefunded) {
+      if (willBeRefunded) {
+        balanceChange = withdrawal.amount;
+      } else {
+        if (user.walletBalance < withdrawal.amount) {
+          return res.status(400).json({
+            success: false,
+            message: "User has insufficient balance to reopen this withdrawal",
+          });
+        }
+        balanceChange = -withdrawal.amount;
+      }
+      user.walletBalance += balanceChange;
+      await user.save({ validateBeforeSave: false });
+    }
+
     withdrawal.status = status;
     if (adminNote) withdrawal.adminNote = adminNote;
     if (status === "Processing") withdrawal.processedAt = new Date();
     if (status === "Completed") withdrawal.completedAt = new Date();
 
-    // If admin rejects — refund
-    if (status === "Failed" && prevStatus === "Pending") {
-      const user = await User.findById(withdrawal.user._id);
-      user.walletBalance += withdrawal.amount;
-      await user.save({ validateBeforeSave: false });
-    }
-
     await withdrawal.save();
 
+    if (withdrawal.transaction) {
+      const transaction = await Transaction.findById(withdrawal.transaction);
+      if (transaction) {
+        transaction.status = status;
+        if (balanceChange !== 0 && transaction.balanceAfter !== undefined) {
+          transaction.balanceAfter += balanceChange;
+        }
+        await transaction.save();
+      }
+    }
+
     await Notification.create({
-      user: withdrawal.user._id,
+      user: user._id,
       title: `Withdrawal ${status}`,
       body: `Your withdrawal of $${withdrawal.amount.toLocaleString()} has been marked as ${status}.`,
       category: "Withdrawal",
@@ -238,6 +280,261 @@ exports.updateWithdrawalStatus = async (req, res, next) => {
     });
 
     res.status(200).json({ success: true, withdrawal });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── PATCH /api/admin/transactions/:id ────────────────────────────────────────
+exports.updateDepositTransaction = async (req, res, next) => {
+  try {
+    const transaction = await Transaction.findById(req.params.id);
+    if (!transaction)
+      return res
+        .status(404)
+        .json({ success: false, message: "Transaction not found" });
+    if (transaction.type !== "Deposit") {
+      return res.status(400).json({
+        success: false,
+        message: "Only deposit transactions can be edited here",
+      });
+    }
+
+    const allowedStatuses = [
+      "Pending",
+      "Processing",
+      "Completed",
+      "Failed",
+      "Reversed",
+    ];
+    const amount =
+      req.body.amount === undefined
+        ? transaction.amount
+        : Number(req.body.amount);
+    const status = req.body.status ?? transaction.status;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Amount must be greater than zero" });
+    }
+    if (!allowedStatuses.includes(status)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Valid transaction status is required" });
+    }
+
+    const user = await User.findById(transaction.user);
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
+
+    const previousCredit =
+      transaction.status === "Completed" ? transaction.amount : 0;
+    const updatedCredit = status === "Completed" ? amount : 0;
+    const balanceChange = updatedCredit - previousCredit;
+    if (user.walletBalance + balanceChange < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "The deposit cannot be reduced because the funds have been spent",
+      });
+    }
+
+    if (
+      req.body.description !== undefined &&
+      (typeof req.body.description !== "string" ||
+        !req.body.description.trim())
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Description cannot be empty" });
+    }
+    for (const field of ["paymentMethod", "bankName", "accountLast4"]) {
+      if (
+        req.body[field] !== undefined &&
+        typeof req.body[field] !== "string"
+      ) {
+        return res
+          .status(400)
+          .json({ success: false, message: `${field} must be text` });
+      }
+    }
+
+    user.walletBalance += balanceChange;
+    if (balanceChange !== 0) {
+      await user.save({ validateBeforeSave: false });
+      if (transaction.balanceAfter !== undefined) {
+        transaction.balanceAfter += balanceChange;
+      }
+    }
+
+    transaction.amount = amount;
+    transaction.status = status;
+    for (const field of [
+      "description",
+      "paymentMethod",
+      "bankName",
+      "accountLast4",
+    ]) {
+      if (req.body[field] !== undefined) {
+        transaction[field] =
+          typeof req.body[field] === "string" ? req.body[field].trim() : "";
+      }
+    }
+    await transaction.save();
+
+    res.status(200).json({
+      success: true,
+      transaction,
+      user: user.toSafeObject(),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ── PATCH /api/admin/withdrawals/:id ─────────────────────────────────────────
+exports.updateWithdrawalDetails = async (req, res, next) => {
+  try {
+    const withdrawal = await Withdrawal.findById(req.params.id);
+    if (!withdrawal)
+      return res
+        .status(404)
+        .json({ success: false, message: "Withdrawal not found" });
+
+    const amount =
+      req.body.amount === undefined
+        ? withdrawal.amount
+        : Number(req.body.amount);
+    const fee =
+      req.body.fee === undefined ? withdrawal.fee : Number(req.body.fee);
+    const status = req.body.status ?? withdrawal.status;
+    const allowedStatuses = [
+      "Pending",
+      "Processing",
+      "Completed",
+      "Failed",
+      "Reversed",
+    ];
+    if (!Number.isFinite(amount) || amount < 50) {
+      return res.status(400).json({
+        success: false,
+        message: "Withdrawal amount must be at least $50",
+      });
+    }
+    if (!Number.isFinite(fee) || fee < 0 || fee > amount) {
+      return res.status(400).json({
+        success: false,
+        message: "Fee must be between zero and the withdrawal amount",
+      });
+    }
+    if (!allowedStatuses.includes(status)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Valid withdrawal status is required" });
+    }
+
+    for (const field of ["bankName", "accountNumber", "accountName"]) {
+      if (
+        req.body[field] !== undefined &&
+        (typeof req.body[field] !== "string" || !req.body[field].trim())
+      ) {
+        return res
+          .status(400)
+          .json({ success: false, message: `${field} cannot be empty` });
+      }
+    }
+    for (const field of ["routingNumber", "adminNote"]) {
+      if (
+        req.body[field] !== undefined &&
+        typeof req.body[field] !== "string"
+      ) {
+        return res
+          .status(400)
+          .json({ success: false, message: `${field} must be text` });
+      }
+    }
+
+    const user = await User.findById(withdrawal.user);
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
+
+    const wasRefunded = ["Failed", "Reversed"].includes(withdrawal.status);
+    const willBeRefunded = ["Failed", "Reversed"].includes(status);
+    const wasPending = ["Pending", "Processing"].includes(withdrawal.status);
+    const willBePending = ["Pending", "Processing"].includes(status);
+    let balanceChange = 0;
+    if (wasRefunded && !willBeRefunded) {
+      balanceChange = -amount;
+    } else if (!wasRefunded && willBeRefunded) {
+      balanceChange = withdrawal.amount;
+    } else if (wasPending || willBePending) {
+      balanceChange = withdrawal.amount - amount;
+    }
+    if (user.walletBalance + balanceChange < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "User has insufficient balance for the increased withdrawal",
+      });
+    }
+
+    user.walletBalance += balanceChange;
+    if (balanceChange !== 0) {
+      await user.save({ validateBeforeSave: false });
+    }
+
+    withdrawal.amount = amount;
+    withdrawal.fee = fee;
+    withdrawal.payout = amount - fee;
+    const previousStatus = withdrawal.status;
+    withdrawal.status = status;
+    if (status === "Processing" && previousStatus !== "Processing") {
+      withdrawal.processedAt = new Date();
+    }
+    if (status === "Completed" && previousStatus !== "Completed") {
+      withdrawal.completedAt = new Date();
+    }
+    for (const field of [
+      "bankName",
+      "accountNumber",
+      "accountName",
+      "routingNumber",
+      "adminNote",
+    ]) {
+      if (req.body[field] !== undefined) {
+        withdrawal[field] = req.body[field].trim();
+      }
+    }
+    await withdrawal.save();
+
+    if (withdrawal.transaction) {
+      const transaction = await Transaction.findById(withdrawal.transaction);
+      if (transaction) {
+        transaction.amount = amount;
+        transaction.status = status;
+        transaction.bankName = withdrawal.bankName;
+        transaction.accountLast4 = withdrawal.accountNumber.slice(-4);
+        transaction.description = `Bank Transfer · ${withdrawal.bankName}`;
+        if (balanceChange !== 0 && transaction.balanceAfter !== undefined) {
+          transaction.balanceAfter += balanceChange;
+        }
+        await transaction.save();
+      }
+    }
+
+    if (status !== previousStatus) {
+      await Notification.create({
+        user: user._id,
+        title: `Withdrawal ${status}`,
+        body: `Your withdrawal of $${amount.toLocaleString()} has been marked as ${status}.`,
+        category: "Withdrawal",
+        icon: status === "Completed" ? "✅" : "🔔",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      withdrawal,
+      user: user.toSafeObject(),
+    });
   } catch (err) {
     next(err);
   }
