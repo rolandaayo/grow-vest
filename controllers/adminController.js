@@ -383,26 +383,25 @@ exports.updateDepositTransaction = async (req, res, next) => {
       }
     }
 
-    // Allow editing the date/time
+    // Set createdAt in-memory before save (Mongoose won't touch it on update)
+    let newCreatedAt = null;
     if (req.body.createdAt) {
       const parsed = new Date(req.body.createdAt);
       if (!isNaN(parsed.getTime())) {
+        newCreatedAt = parsed;
         transaction.createdAt = parsed;
       }
     }
 
     await transaction.save();
 
-    // Patch createdAt directly to bypass Mongoose timestamp auto-update
-    if (req.body.createdAt) {
-      const parsed = new Date(req.body.createdAt);
-      if (!isNaN(parsed.getTime())) {
-        await Transaction.updateOne(
-          { _id: transaction._id },
-          { $set: { createdAt: parsed } },
-        );
-        transaction.createdAt = parsed;
-      }
+    // Force the date directly in MongoDB — bypasses any Mongoose timestamp interference
+    if (newCreatedAt) {
+      await Transaction.collection.updateOne(
+        { _id: transaction._id },
+        { $set: { createdAt: newCreatedAt } },
+      );
+      transaction.createdAt = newCreatedAt;
     }
 
     res.status(200).json({
