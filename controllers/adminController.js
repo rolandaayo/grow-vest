@@ -294,12 +294,6 @@ exports.updateDepositTransaction = async (req, res, next) => {
       return res
         .status(404)
         .json({ success: false, message: "Transaction not found" });
-    if (transaction.type !== "Deposit") {
-      return res.status(400).json({
-        success: false,
-        message: "Only deposit transactions can be edited here",
-      });
-    }
 
     const allowedStatuses = [
       "Pending",
@@ -331,15 +325,20 @@ exports.updateDepositTransaction = async (req, res, next) => {
         .status(404)
         .json({ success: false, message: "User not found" });
 
+    // Recalculate wallet balance based on credit types (Deposit, Return, Referral Bonus)
+    const creditTypes = ["Deposit", "Return", "Referral Bonus"];
+    const isCreditType = creditTypes.includes(transaction.type);
     const previousCredit =
-      transaction.status === "Completed" ? transaction.amount : 0;
-    const updatedCredit = status === "Completed" ? amount : 0;
+      isCreditType && transaction.status === "Completed"
+        ? transaction.amount
+        : 0;
+    const updatedCredit = isCreditType && status === "Completed" ? amount : 0;
     const balanceChange = updatedCredit - previousCredit;
     if (user.walletBalance + balanceChange < 0) {
       return res.status(400).json({
         success: false,
         message:
-          "The deposit cannot be reduced because the funds have been spent",
+          "The amount cannot be reduced because the funds have been spent",
       });
     }
 
@@ -383,7 +382,28 @@ exports.updateDepositTransaction = async (req, res, next) => {
           typeof req.body[field] === "string" ? req.body[field].trim() : "";
       }
     }
+
+    // Allow editing the date/time
+    if (req.body.createdAt) {
+      const parsed = new Date(req.body.createdAt);
+      if (!isNaN(parsed.getTime())) {
+        transaction.createdAt = parsed;
+      }
+    }
+
     await transaction.save();
+
+    // Patch createdAt directly to bypass Mongoose timestamp auto-update
+    if (req.body.createdAt) {
+      const parsed = new Date(req.body.createdAt);
+      if (!isNaN(parsed.getTime())) {
+        await Transaction.updateOne(
+          { _id: transaction._id },
+          { $set: { createdAt: parsed } },
+        );
+        transaction.createdAt = parsed;
+      }
+    }
 
     res.status(200).json({
       success: true,
